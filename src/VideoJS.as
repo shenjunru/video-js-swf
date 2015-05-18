@@ -6,6 +6,8 @@ package{
     import com.videojs.structs.ExternalErrorEventName;
     import com.videojs.Base64;
 
+    import org.mangui.hls.utils.Params2Settings;
+
     import flash.display.Sprite;
     import flash.display.StageAlign;
     import flash.display.StageScaleMode;
@@ -147,6 +149,22 @@ package{
               if(loaderInfo.parameters.rtmpStream != undefined && loaderInfo.parameters.rtmpStream != ""){
                 _app.model.rtmpStream = loaderInfo.parameters.rtmpStream;
               }
+            }
+
+            // video-js integration uses a different setting from flashls's default.
+            if(loaderInfo.parameters.hls_live_flushurlcache == undefined){
+                loaderInfo.parameters.hls_live_flushurlcache = true;
+            }
+            // Params2Settings sets Boolean HLSSettings attribute by simple type conversion.
+            // If 'false' is set as a parameter, it's passed as string "false" here and that is converted to Boolean:true.
+            // As workaround, this converts string 'false' to empty string, which will be converted to Boolean:false.
+            for(var name:String in loaderInfo.parameters){
+                if(0 == name.indexOf('hls_')){
+                    if(loaderInfo.parameters[name] == 'false'){
+                        loaderInfo.parameters[name] = '';
+                    }
+                    Params2Settings.set(name.substr(4), loaderInfo.parameters[name]);
+                }
             }
 
             // Hard coding this in for now until we can come up with a better solution for 5.0 to avoid XSS.
@@ -294,6 +312,17 @@ package{
                 case "rtmpStream":
                     return _app.model.rtmpStream;
                     break;
+
+		// for HLSVideoProvider only
+                case "levels":
+                    return _app.model.levels;
+                    break;
+                case "level":
+                    return _app.model.level;
+                    break;
+                case "autoLevel":
+                    return _app.model.autoLevel;
+                    break;
             }
             return null;
         }
@@ -348,6 +377,11 @@ package{
                     break;
                 case "rtmpStream":
                     _app.model.rtmpStream = String(pValue);
+                    break;
+
+		// for HLSVideoProvider only
+                case "level":
+                    _app.model.level = int(pValue);
                     break;
                 default:
                     _app.model.broadcastErrorEventExternally(ExternalErrorEventName.PROPERTY_NOT_FOUND, pPropertyName);

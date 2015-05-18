@@ -3,6 +3,8 @@ package com.videojs.providers{
     import com.videojs.VideoJSModel;
     import com.videojs.structs.ExternalErrorEventName;
     import com.videojs.structs.ExternalEventName;
+    import com.videojs.structs.ReadyState;
+    import com.videojs.structs.NetworkState;
 
     import flash.events.Event;
     import flash.events.IOErrorEvent;
@@ -76,31 +78,31 @@ package com.videojs.providers{
 
         public function get readyState():int{
             if(_canPlayThroughDispatched){
-                return 4;
+                return ReadyState.HAVE_ENOUGH_DATA;
             }
             else if(_loadCompleted){
-                return 3;
+                return ReadyState.HAVE_FUTURE_DATA;
             }
             else if(_loadStarted){
-                return 2;
+                return ReadyState.HAVE_CURRENT_DATA;
             }
             else if(_estimatedDurations >= 5){
-                return 1;
+                return ReadyState.HAVE_METADATA;
             }
             else{
-                return 0;
+                return ReadyState.HAVE_NOTHING;
             }
         }
 
         public function get networkState():int{
             if(_loadErrored){
-                return 3;
+                return NetworkState.NETWORK_NO_SOURCE;
             }
             else if(_loadStarted){
-                return 2;
+                return NetworkState.NETWORK_LOADING;
             }
             else{
-                return 1;
+                return NetworkState.NETWORK_IDLE;
             }
         }
 
@@ -402,6 +404,20 @@ package com.videojs.providers{
                 _soundChannel = null;
                 _audioPlaybackPaused = true;
             }
+        }
+
+        public function get levels():int{
+            return 1;
+        }
+
+        public function get level():int{
+            return 0;
+        }
+
+        public function set level(pLevel:int):void{}
+
+        public function get autoLevel():Boolean{
+            return false;
         }
     }
 }

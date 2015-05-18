@@ -1,11 +1,12 @@
 package com.videojs.providers{
-    
+
     import com.videojs.VideoJSModel;
     import com.videojs.events.VideoPlaybackEvent;
     import com.videojs.structs.ExternalErrorEventName;
     import com.videojs.structs.ExternalEventName;
-    import com.videojs.structs.PlaybackType;
-    
+    import com.videojs.structs.ReadyState;
+    import com.videojs.structs.NetworkState;
+
     import flash.events.EventDispatcher;
     import flash.events.NetStatusEvent;
     import flash.events.TimerEvent;
@@ -16,9 +17,9 @@ package com.videojs.providers{
     import flash.utils.ByteArray;
     import flash.utils.Timer;
     import flash.utils.getTimer;
-    
+
     public class RTMPVideoProvider extends EventDispatcher implements IProvider{
-        
+
         private var _nc:NetConnection;
         private var _ns:NetStream;
         private var _rtmpRetryTimer:Timer;
@@ -33,7 +34,7 @@ package com.videojs.providers{
         private var _pauseOnStart:Boolean = false;
         private var _pausePending:Boolean = false;
         private var _videoReference:Video;
-        
+
         private var _src:Object;
         private var _metadata:Object;
         private var _hasDuration:Boolean = false;
@@ -47,9 +48,9 @@ package com.videojs.providers{
         private var _reportEnded:Boolean = false;
         private var _canPlayThrough:Boolean = false;
         private var _loop:Boolean = false;
-        
+
         private var _model:VideoJSModel;
-        
+
         public function RTMPVideoProvider(){
             _model = VideoJSModel.getInstance();
             _metadata = {};
@@ -62,11 +63,11 @@ package com.videojs.providers{
         public function get loop():Boolean{
             return _loop;
         }
-        
+
         public function set loop(pLoop:Boolean):void{
             _loop = pLoop;
         }
-        
+
         public function get time():Number{
             if(_ns != null){
                 return _ns.time;
@@ -75,7 +76,7 @@ package com.videojs.providers{
                 return 0;
             }
         }
-        
+
         public function get duration():Number{
             if(_metadata != null && _metadata.duration != undefined){
                 return Number(_metadata.duration);
@@ -84,7 +85,7 @@ package com.videojs.providers{
                 return 0;
             }
         }
-        
+
         public function get readyState():int{
             // if we have metadata and a known duration
             if(_metadata != null && _metadata.duration != undefined){
@@ -92,45 +93,43 @@ package com.videojs.providers{
                 if(_isPlaying){
                     // if the asset can play through without rebuffering
                     if(_canPlayThrough){
-                        return 4;
+                        return ReadyState.HAVE_ENOUGH_DATA;
                     }
                     // if we don't know if the asset can play through without buffering
                     else{
                         // if the buffer is full, we assume we can seek a head at least a keyframe
                         if(_ns.bufferLength >= _ns.bufferTime){
-                            return 3;
+                            return ReadyState.HAVE_FUTURE_DATA;
                         }
                         // otherwise, we can't be certain that seeking ahead will work
                         else{
-                            return 2;   
+                            return ReadyState.HAVE_CURRENT_DATA;
                         }
                     }
                 }
                 // if playback has not begun
                 else{
-                    return 1;
+                    return ReadyState.HAVE_METADATA;
                 }
             }
             // if we have no metadata
             else{
-                return 0;
+                return ReadyState.HAVE_NOTHING;
             }
         }
-        
+
         public function get networkState():int{
             if(!_loadStarted){
-                return 0;
+                return NetworkState.NETWORK_EMPTY;
+            }
+            else if(_loadCompleted){
+                return NetworkState.NETWORK_IDLE;
+            }
+            else if(_loadErrored){
+                return NetworkState.NETWORK_NO_SOURCE;
             }
             else{
-                if(_loadCompleted){
-                    return 1;
-                }
-                else if(_loadErrored){
-                    return 3;
-                }
-                else{
-                    return 2;
-                }
+                return NetworkState.NETWORK_LOADING;
             }
         }
 
@@ -149,7 +148,7 @@ package com.videojs.providers{
         public function discontinuity():void{
             throw "RTMPVideoProvider does not support discontinuities";
         }
-        
+
         public function get buffered():Number{
             if(duration > 0){
                 return duration;
@@ -158,7 +157,7 @@ package com.videojs.providers{
                 return 0;
             }
         }
-        
+
         public function get bufferedBytesEnd():int{
             if(_loadStarted){
                 return _ns.bytesLoaded;
@@ -167,41 +166,41 @@ package com.videojs.providers{
                 return 0;
             }
         }
-        
+
         public function get bytesLoaded():int{
-            
+
             return 0;
         }
-        
+
         public function get bytesTotal():int{
-            
+
             return 0;
         }
-        
+
         public function get playing():Boolean{
             return _isPlaying;
         }
-        
+
         public function get paused():Boolean{
             return _isPaused;
         }
-        
+
         public function get ended():Boolean{
             return _reportEnded;
         }
-        
+
         public function get seeking():Boolean{
             return _isSeeking;
         }
-        
+
         public function get usesNetStream():Boolean{
             return true;
         }
-        
+
         public function get metadata():Object{
             return _metadata;
         }
-        
+
         public function set src(pSrc:Object):void{
             _hasDuration = false;
             if(_isPlaying){
@@ -216,14 +215,14 @@ package com.videojs.providers{
                 init(pSrc, false);
             }
         }
-        
+
         public function get srcAsString():String{
             if(_src != null){
                 return _src.url;
             }
             return "";
         }
-        
+
         public function init(pSrc:Object, pAutoplay:Boolean):void{
             _src = pSrc;
             _loadErrored = false;
@@ -233,14 +232,14 @@ package com.videojs.providers{
                 play();
             }
         }
-        
+
         public function load():void{
             _pauseOnStart = true;
             _isPlaying = false;
             _isPaused = true;
             initNetConnection();
         }
-        
+
         public function play():void{
             // if this is a fresh playback request
             if(!_loadStarted){
@@ -269,7 +268,7 @@ package com.videojs.providers{
                 _model.broadcastEventExternally(ExternalEventName.ON_RESUME);
             }
         }
-        
+
         public function pause():void{
             if(_isPlaying && !_isPaused){
                 _ns.pause();
@@ -284,7 +283,7 @@ package com.videojs.providers{
                 _model.broadcastEventExternally(ExternalEventName.ON_PAUSE);
             }
         }
-        
+
         public function resume():void{
             if(_isPlaying && _isPaused){
                 _ns.resume();
@@ -292,7 +291,7 @@ package com.videojs.providers{
                 _model.broadcastEventExternally(ExternalEventName.ON_RESUME);
             }
         }
-        
+
         public function seekBySeconds(pTime:Number):void{
             if(_isPlaying){
                 _isSeeking = true;
@@ -309,7 +308,7 @@ package com.videojs.providers{
                 _model.broadcastEventExternally(ExternalEventName.ON_RESUME);
             }
         }
-        
+
         public function seekByPercent(pPercent:Number):void{
             if(_isPlaying && _metadata.duration != undefined){
                 _isSeeking = true;
@@ -323,11 +322,11 @@ package com.videojs.providers{
                 else{
                     _throughputTimer.stop();
                     _ns.seek(pPercent * _metadata.duration);
-                    
+
                 }
             }
         }
-        
+
         public function stop():void{
             if(_isPlaying){
                 _ns.close();
@@ -339,11 +338,11 @@ package com.videojs.providers{
                 _throughputTimer.reset();
             }
         }
-        
+
         public function attachVideo(pVideo:Video):void{
             _videoReference = pVideo;
         }
-        
+
         public function die():void{
             if(_videoReference)
             {
@@ -390,14 +389,28 @@ package com.videojs.providers{
                 }
             }
         }
-                
+
+        public function get levels():int{
+            return 1;
+        }
+
+        public function get level():int{
+            return 0;
+        }
+
+        public function set level(pLevel:int):void{}
+
+        public function get autoLevel():Boolean{
+            return false;
+        }
+
         private function initNetConnection():void{
             if(_nc == null){
                 _nc = new NetConnection();
                 _nc.client = this;
                 _nc.addEventListener(NetStatusEvent.NET_STATUS, onNetConnectionStatus);
             }
-            
+
             // initiating an RTMP connection carries some overhead, so if we're already connected
             // to a server, and that server is the same as the one that hosts whatever we're trying to
             // play, we should skip straight to the playback
@@ -413,7 +426,7 @@ package com.videojs.providers{
                 _nc.connect(_src.connectionURL);
             }
         }
-        
+
         private function initNetStream():void{
             if(_ns != null){
                 _ns.removeEventListener(NetStatusEvent.NET_STATUS, onNetStreamStatus);
@@ -428,7 +441,7 @@ package com.videojs.providers{
             _model.broadcastEventExternally(ExternalEventName.ON_LOAD_START);
             _model.broadcastEvent(new VideoPlaybackEvent(VideoPlaybackEvent.ON_STREAM_READY, {ns:_ns}));
         }
-        
+
         private function calculateThroughput():void{
             // if it's finished loading, we can kill the calculations and assume it can play through
             if(_ns.bytesLoaded == _ns.bytesTotal){
@@ -454,11 +467,11 @@ package com.videojs.providers{
                 }
             }
         }
-        
+
         private function onRTMPRetryTimerTick(e:TimerEvent):void{
             initNetConnection();
         }
-        
+
         private function onNetConnectionStatus(e:NetStatusEvent):void{
             switch(e.info.code){
                 case "NetConnection.Connect.Success":
@@ -474,17 +487,17 @@ package com.videojs.providers{
                     }
                     break;
                 default:
-                    
+
                     if(e.info.level == "error"){
                         _model.broadcastErrorEventExternally(e.info.code);
                         _model.broadcastErrorEventExternally(e.info.description);
                     }
-                    
+
                     break;
             }
             _model.broadcastEvent(new VideoPlaybackEvent(VideoPlaybackEvent.ON_NETCONNECTION_STATUS, {info:e.info}));
         }
-        
+
         private function onNetStreamStatus(e:NetStatusEvent):void{
             switch(e.info.code){
                 case "NetStream.Play.Reset":
@@ -511,7 +524,7 @@ package com.videojs.providers{
                     }
                     _loadStarted = true;
                     break;
-                
+
                 case "NetStream.Buffer.Full":
                     _isBuffering = false;
                     _isPlaying = true;
@@ -524,7 +537,7 @@ package com.videojs.providers{
                         _isPaused = true;
                     }
                     break;
-                
+
                 case "NetStream.Buffer.Empty":
                     // playback is over
                     if (_hasEnded) {
@@ -546,13 +559,13 @@ package com.videojs.providers{
                     }
 
                     break;
-                
+
                 case "NetStream.Play.Stop":
                     _hasEnded = true;
                     _throughputTimer.stop();
                     _throughputTimer.reset();
                     break;
-                
+
                 case "NetStream.Seek.Notify":
                     _isPlaying = true;
                     _isSeeking = false;
@@ -563,29 +576,29 @@ package com.videojs.providers{
                     _loadStartTimestamp = getTimer();
                     _throughputTimer.reset();
                     _throughputTimer.start();
-                    
+
                     break;
-                
+
                 case "NetStream.Play.StreamNotFound":
                     _loadErrored = true;
                     _model.broadcastErrorEventExternally(ExternalErrorEventName.SRC_404);
                     break;
-                
+
                 default:
                     if(e.info.level == "error"){
                         _model.broadcastErrorEventExternally(e.info.code);
                         _model.broadcastErrorEventExternally(e.info.description);
                     }
-                    
+
                     break;
             }
             _model.broadcastEvent(new VideoPlaybackEvent(VideoPlaybackEvent.ON_NETSTREAM_STATUS, {info:e.info}));
         }
-        
+
         private function onThroughputTimerTick(e:TimerEvent):void{
             calculateThroughput();
         }
-        
+
         public function onMetaData(pMetaData:Object):void{
             _metadata = pMetaData;
             if(pMetaData.duration != undefined){
@@ -603,51 +616,51 @@ package com.videojs.providers{
             _model.broadcastEvent(new VideoPlaybackEvent(VideoPlaybackEvent.ON_META_DATA, {metadata:_metadata}));
             _model.broadcastEventExternally(ExternalEventName.ON_METADATA, _metadata);
         }
-        
+
         public function onCuePoint(pInfo:Object):void{
             _model.broadcastEvent(new VideoPlaybackEvent(VideoPlaybackEvent.ON_CUE_POINT, {cuepoint:pInfo}));
         }
-        
+
         public function onXMPData(pInfo:Object):void{
             _model.broadcastEvent(new VideoPlaybackEvent(VideoPlaybackEvent.ON_XMP_DATA, {cuepoint:pInfo}));
         }
-        
+
         public function onPlayStatus(e:Object):void{
 
         }
-        
+
         /**
          * Called from FMS during bandwidth detection
          */
         public function onBWCheck(... pRest):Number {
             return 0;
         }
-        
+
         /**
          * Called from FMS when bandwidth detection is completed.
          */
-        public function onBWDone(... pRest):void {        
+        public function onBWDone(... pRest):void {
             // no op for now but needed by NetConnection
         }
-        
+
         /**
          * Called from FMS when subscribing to live streams.
          */
         public function onFCSubscribe(pInfo:Object):void {
-            // no op for now but needed by NetConnection            
+            // no op for now but needed by NetConnection
         }
-        
+
         /**
          * Called from FMS when unsubscribing to live streams.
          */
         public function onFCUnsubscribe(pInfo:Object):void {
-            // no op for now but needed by NetConnection            
-        }        
-        
+            // no op for now but needed by NetConnection
+        }
+
         /**
          * Called from FMS for NetStreams. Incorrectly used for NetConnections as well.
          * This is here to prevent runtime errors.
          */
-        public function streamInfo(pObj:Object):void {}        
+        public function streamInfo(pObj:Object):void {}
     }
 }

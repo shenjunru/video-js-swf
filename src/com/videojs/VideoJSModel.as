@@ -2,10 +2,11 @@ package com.videojs{
 
     import com.videojs.events.VideoJSEvent;
     import com.videojs.events.VideoPlaybackEvent;
+    import com.videojs.providers.IProvider;
     import com.videojs.providers.HTTPAudioProvider;
     import com.videojs.providers.HTTPVideoProvider;
-    import com.videojs.providers.IProvider;
     import com.videojs.providers.RTMPVideoProvider;
+    import com.videojs.providers.HLSVideoProvider;
     import com.videojs.structs.ExternalErrorEventName;
     import com.videojs.structs.ExternalEventName;
     import com.videojs.structs.PlaybackType;
@@ -204,7 +205,13 @@ package com.videojs{
             _src = pValue;
             _rtmpConnectionURL = "";
             _rtmpStream = "";
-            _currentPlaybackType = PlaybackType.HTTP;
+            // detect HLS by checking the extension of src
+            if(_src.indexOf(".m3u8") != -1){
+                _currentPlaybackType = PlaybackType.HLS;
+            }
+            else{
+            	_currentPlaybackType = PlaybackType.HTTP;
+            }
             broadcastEventExternally(ExternalEventName.ON_SRC_CHANGE, _src);
             initProvider();
             if(_autoplay){
@@ -256,7 +263,13 @@ package com.videojs{
          */
         public function set srcFromFlashvars(pValue:String):void {
             _src = pValue;
-            _currentPlaybackType = PlaybackType.HTTP
+            // detect HLS by checking the extension of src
+			if(_src.search(/(https?|file)\:\/\/.*?\.m3u8(\?.*)?/i) != -1){
+                _currentPlaybackType = PlaybackType.HLS;
+            }
+            else{
+                _currentPlaybackType = PlaybackType.HTTP;
+            }
             initProvider();
             if(_autoplay){
                 _provider.play();
@@ -531,6 +544,51 @@ package com.videojs{
             }
         }
 
+        /**
+         * Returns the number of stream levels that this content has.
+         */
+        public function get levels():int
+        {
+            if(_provider){
+                return _provider.levels;
+            }
+            return 1;
+        }
+
+        /**
+         * Returns the currently used stream level.
+         */
+        public function get level():int
+        {
+            if(_provider){
+                return _provider.level;
+            }
+            return 0;
+        }
+
+        /**
+         * Select the stream level.
+         * If -1 is specified, it means auto selection.
+         * If a level is specified (0-based index), that level is used and auto selection is disabled.
+         */
+        public function set level(pLevel:int):void
+        {
+            if(_provider){
+                _provider.level = pLevel;
+            }
+        }
+
+        /**
+          * Returns whether auto selection is currently enabled or not.
+          */
+        public function get autoLevel():Boolean
+        {
+            if(_provider){
+                return _provider.autoLevel;
+            }
+            return false;
+        }
+
         public function hexToNumber(pHex:String):Number{
             var __number:Number = 0;
             // clean it up
@@ -611,6 +669,14 @@ package com.videojs{
                             streamURL: _rtmpStream
                         };
                         _provider = new RTMPVideoProvider();
+                        _provider.attachVideo(_videoReference);
+                        _provider.init(__src, _autoplay);
+                    }
+                    else if(_currentPlaybackType == PlaybackType.HLS){
+                        __src = {
+                            path: _src
+                        };
+                        _provider = new HLSVideoProvider();
                         _provider.attachVideo(_videoReference);
                         _provider.init(__src, _autoplay);
                     }

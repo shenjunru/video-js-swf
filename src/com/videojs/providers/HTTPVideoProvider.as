@@ -4,6 +4,9 @@ package com.videojs.providers{
     import com.videojs.events.VideoPlaybackEvent;
     import com.videojs.structs.ExternalErrorEventName;
     import com.videojs.structs.ExternalEventName;
+    import com.videojs.structs.ReadyState;
+    import com.videojs.structs.NetworkState;
+
     import flash.events.EventDispatcher;
     import flash.events.NetStatusEvent;
     import flash.events.TimerEvent;
@@ -138,45 +141,43 @@ package com.videojs.providers{
                 if(_playbackStarted){
                     // if the asset can play through without rebuffering
                     if(_canPlayThrough){
-                        return 4;
+                        return ReadyState.HAVE_ENOUGH_DATA;
                     }
                     // if we don't know if the asset can play through without buffering
                     else{
                         // if the buffer is full, we assume we can seek a head at least a keyframe
                         if(_ns.bufferLength >= _ns.bufferTime){
-                            return 3;
+                            return ReadyState.HAVE_FUTURE_DATA;
                         }
                         // otherwise, we can't be certain that seeking ahead will work
                         else{
-                            return 2;
+                            return ReadyState.HAVE_CURRENT_DATA;
                         }
                     }
                 }
                 // if playback has not begun
                 else{
-                    return 1;
+                    return ReadyState.HAVE_METADATA;
                 }
             }
             // if we have no metadata
             else{
-                return 0;
+                return ReadyState.HAVE_NOTHING;
             }
         }
 
         public function get networkState():int{
             if(!_loadStarted){
-                return 0;
+                return NetworkState.NETWORK_EMPTY;
+            }
+            else if(_loadCompleted){
+                return NetworkState.NETWORK_IDLE;
+            }
+            else if(_loadErrored){
+                return NetworkState.NETWORK_NO_SOURCE;
             }
             else{
-                if(_loadCompleted){
-                    return 1;
-                }
-                else if(_loadErrored){
-                    return 3;
-                }
-                else{
-                    return 2;
-                }
+                return NetworkState.NETWORK_LOADING;
             }
         }
 
@@ -547,6 +548,7 @@ package com.videojs.providers{
                     break;
 
                 case "NetStream.Buffer.Full":
+                    _model.broadcastEventExternally(ExternalEventName.ON_CAN_PLAY);
                     _pausedSeekValue = -1;
                     _playbackStarted = true;
                     if(_pausePending){
@@ -664,6 +666,20 @@ package com.videojs.providers{
 
         public function onPlayStatus(e:Object):void{
 
+        }
+
+        public function get levels():int{
+            return 1;
+        }
+
+        public function get level():int{
+            return 0;
+        }
+
+        public function set level(pLevel:int):void{}
+
+        public function get autoLevel():Boolean{
+            return false;
         }
     }
 }
